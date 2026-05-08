@@ -22,22 +22,38 @@ model = None
 prediction_history = []
 
 # LOAD MODEL
+# LOAD MODEL
 def load_model():
     """Load the trained model with error handling"""
+
     global model
 
     try:
-        model_path = 'scripts/models/best_cnn_model.keras'
 
-        if os.path.exists(model_path):
-            model = tf.keras.models.load_model(model_path)
-            logger.info("Model loaded successfully")
-        else:
-            logger.error(f"Model file not found at {model_path}")
-            raise FileNotFoundError(f"Model file not found at {model_path}")
+        import gdown
+
+        model_path = 'best_cnn_model.keras'
+
+        # Download model if not present
+        if not os.path.exists(model_path):
+
+            file_id = "1RrAAdhHZlnGipzHuVBIL38zPBtdosGG6"
+
+            url = f"https://drive.google.com/uc?id={file_id}"
+
+            logger.info("Downloading model from Google Drive...")
+
+            gdown.download(url, model_path, quiet=False)
+
+        # Load model
+        model = tf.keras.models.load_model(model_path)
+
+        logger.info("Model loaded successfully")
 
     except Exception as e:
+
         logger.error(f"Error loading model: {str(e)}")
+
         raise e
 
 
