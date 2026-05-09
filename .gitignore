@@ -1,4 +1,7 @@
 venv/
 dataset/
 *.keras
+
+tfenv/
 __pycache__/
+*.pyc
