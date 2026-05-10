@@ -72,6 +72,7 @@ load_model_fn()
 # ---------------- IMAGE PREPROCESS ----------------
 def preprocess_image(image_file):
     try:
+        image_file.seek(0)
         img = Image.open(BytesIO(image_file.read()))
         if img.mode != "RGB":
             img = img.convert("RGB")
@@ -98,7 +99,7 @@ def validate_image_file(file):
 def index():
     return render_template("index.html")
 
-@@app.route("/predict", methods=["POST"])
+@app.route("/predict", methods=["POST"])
 def predict():
     try:
         if model is None:
