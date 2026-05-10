@@ -1,3 +1,6 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Force CPU only
 from flask import Flask, render_template, request, jsonify
 from io import BytesIO
 from PIL import Image
@@ -95,7 +98,7 @@ def validate_image_file(file):
 def index():
     return render_template("index.html")
 
-@app.route("/predict", methods=["POST"])
+@@app.route("/predict", methods=["POST"])
 def predict():
     try:
         if model is None:
@@ -110,8 +113,11 @@ def predict():
             return jsonify({"success": False, "error": msg}), 400
 
         img_array = preprocess_image(file)
+        
+        # 1. Run the prediction
         prediction = model.predict(img_array)
 
+        # 2. Extract all the data you need from the prediction first
         class_names = ["Cataract", "Diabetic Retinopathy", "Glaucoma", "Normal"]
         predicted_index = np.argmax(prediction)
         predicted_class = class_names[predicted_index]
@@ -128,17 +134,24 @@ def predict():
             "confidence": confidence
         })
 
+        # --- ADD THE LINE HERE ---
+        # Now that we've saved all data into variables, we clear the heavy memory
+        tf.keras.backend.clear_session() 
+        # -------------------------
+
         return jsonify({
             "success": True,
             "prediction": predicted_class,
             "confidence": confidence,
             "probabilities": probabilities,
-            "history": prediction_history  # Add this line!
+            "history": prediction_history 
         })
 
     except Exception as e:
         logger.error(f"Prediction error: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 
+        # Adding clear_session here too ensures memory is wiped even if it fails
+        tf.keras.backend.clear_session() 
+        return jsonify({"success": False, "error": str(e)}), 500
 @app.route("/history")
 def show_history():
     # This lets you see the list directly in your browser
