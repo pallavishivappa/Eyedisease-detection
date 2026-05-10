@@ -25,11 +25,11 @@ prediction_history = []
 # ---------------- PATHS ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Note: Ensure these folders exist or gdown has permission to create them
-MODEL_PATH = os.path.join(BASE_DIR, "scripts", "models", "final_model.keras")
+MODEL_PATH = os.path.join(BASE_DIR, "scripts", "models", "final_model.h5")
 ENCODER_PATH = os.path.join(BASE_DIR, "scripts", "models", "label_encoder.pkl")
 
 # ---------------- DOWNLOAD & LOAD LOGIC ----------------
-FILE_ID = "1kfNWW10MOqLnm5awhJvIJKB3E_V3bt7a"
+FILE_ID = "1OIpruXL-mujSGD9eYoleE-RAIdc_qZDl"
 
 def download_model():
     if not os.path.exists(MODEL_PATH):
@@ -132,12 +132,17 @@ def predict():
             "success": True,
             "prediction": predicted_class,
             "confidence": confidence,
-            "probabilities": probabilities
+            "probabilities": probabilities,
+            "history": prediction_history  # Add this line!
         })
 
     except Exception as e:
         logger.error(f"Prediction error: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 
+@app.route("/history")
+def show_history():
+    # This lets you see the list directly in your browser
+    return jsonify(prediction_history)
 
 @app.route("/health")
 def health():

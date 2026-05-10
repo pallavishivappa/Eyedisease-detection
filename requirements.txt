@@ -8,3 +8,4 @@ gdown
 tensorflow==2.15.0
 scikit-learn==1.4.2
 matplotlib==3.8.4
+h5py

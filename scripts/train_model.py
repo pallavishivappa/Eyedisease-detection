@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, classification_report, f1_score, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import pickle
+import h5py
 
 # -----------------------------
 # 1. DATASET PATH
@@ -165,6 +166,6 @@ print(classification_report(
 # -----------------------------
 # 10. SAVE FINAL MODEL
 # -----------------------------
-model.save("models/final_model.keras")
+tf.keras.models.save_model(model, "models/final_model.h5")
 
 print("\nModel saved successfully!")
