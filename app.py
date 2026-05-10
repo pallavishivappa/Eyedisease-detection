@@ -6,291 +6,209 @@ import tensorflow as tf
 from tensorflow.keras.preprocessing.image import img_to_array
 import os
 import logging
+import gdown
+import pickle
 
-# Configure logging
+# ---------------- LOGGING ----------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Flask application initialization
+# ---------------- APP INIT ----------------
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
 
-# Global variable for model
+# ---------------- GLOBALS ----------------
 model = None
-
-# HISTORY STORAGE
+label_encoder = None
 prediction_history = []
 
-# LOAD MODEL
-# LOAD MODEL
-def load_model():
-    """Load the trained model with error handling"""
+# ---------------- PATHS ----------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "scripts", "models", "final_model.keras")
+ENCODER_PATH = os.path.join(BASE_DIR, "scripts", "models", "label_encoder.pkl")
 
-    global model
+# ---------------- LOAD MODEL ----------------
+FILE_ID = "1kfNWW10MOqLnm5awhJvIJKB3E_V3bt7a"
+
+# ---------------- DOWNLOAD MODEL ----------------
+def download_model():
+
+    # Download only if model is missing
+    if not os.path.exists(MODEL_PATH):
+
+        os.makedirs(
+            os.path.dirname(MODEL_PATH),
+            exist_ok=True
+        )
+
+        url = f"https://drive.google.com/uc?id={FILE_ID}"
+
+        print("Downloading model...")
+
+        gdown.download(
+            url,
+            MODEL_PATH,
+            quiet=False
+        )
+
+        print("Model downloaded successfully")
+
+# ---------------- LOAD MODEL ----------------
+def load_model_fn():
+    global model, label_encoder
 
     try:
 
-        import gdown
-
-        model_path = 'best_cnn_model.keras'
-
-        # Download model if not present
-        if not os.path.exists(model_path):
-
-            file_id = "1RrAAdhHZlnGipzHuVBIL38zPBtdosGG6"
-
-            url = f"https://drive.google.com/uc?id={file_id}"
-
-            logger.info("Downloading model from Google Drive...")
-
-            gdown.download(url, model_path, quiet=False)
+        # Download model if missing
+        download_model()
 
         # Load model
-        model = tf.keras.models.load_model(model_path)
+        model = tf.keras.models.load_model(
+            MODEL_PATH,
+            compile=False
+        )
 
-        logger.info("Model loaded successfully")
+        # Load label encoder
+        if os.path.exists(ENCODER_PATH):
+
+            with open(ENCODER_PATH, "rb") as f:
+                label_encoder = pickle.load(f)
+
+        logger.info(
+            "Model and encoder loaded successfully"
+        )
 
     except Exception as e:
 
-        logger.error(f"Error loading model: {str(e)}")
+        logger.error(
+            f"Model loading error: {str(e)}"
+        )
 
         raise e
 
-
-# PREPROCESS IMAGE
+# ---------------- IMAGE PREPROCESS ----------------
 def preprocess_image(image_file):
-    """Preprocess the uploaded image for model prediction"""
-
     try:
         img = Image.open(BytesIO(image_file.read()))
 
-        # Convert to RGB
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
+        if img.mode != "RGB":
+            img = img.convert("RGB")
 
-        # Resize image
         img = img.resize((128, 128))
 
-        # Convert to array
         img_array = img_to_array(img) / 255.0
-
-        # Add batch dimension
         img_array = np.expand_dims(img_array, axis=0)
 
         return img_array
 
     except Exception as e:
-        logger.error(f"Error preprocessing image: {str(e)}")
+        logger.error(f"Preprocessing error: {str(e)}")
         raise e
 
-
-# VALIDATE IMAGE
+# ---------------- VALIDATION ----------------
 def validate_image_file(file):
-
-    if not file:
-        return False, "No file provided"
-
-    if file.filename == '':
+    if not file or file.filename == "":
         return False, "No file selected"
 
-    allowed_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff'}
+    allowed = {".png", ".jpg", ".jpeg", ".bmp", ".tiff"}
+    ext = os.path.splitext(file.filename.lower())[1]
 
-    file_ext = os.path.splitext(file.filename.lower())[1]
-
-    if file_ext not in allowed_extensions:
-        return False, "Invalid file format. Upload PNG, JPG, JPEG, BMP, or TIFF"
+    if ext not in allowed:
+        return False, "Invalid file format"
 
     return True, "Valid file"
 
-
-# HOME ROUTE
-@app.route('/')
+# ---------------- ROUTES ----------------
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-
-# PREDICTION ROUTE
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
-
     try:
-
-        # Check model
         if model is None:
-            return jsonify({
-                'success': False,
-                'error': 'Model not loaded'
-            }), 500
+            return jsonify({"success": False, "error": "Model not loaded"}), 500
 
-        # Check file
-        if 'file' not in request.files:
-            return jsonify({
-                'success': False,
-                'error': 'No file uploaded'
-            }), 400
+        if "file" not in request.files:
+            return jsonify({"success": False, "error": "No file uploaded"}), 400
 
-        file = request.files['file']
+        file = request.files["file"]
 
-        # Validate file
-        is_valid, message = validate_image_file(file)
-
+        is_valid, msg = validate_image_file(file)
         if not is_valid:
-            return jsonify({
-                'success': False,
-                'error': message
-            }), 400
+            return jsonify({"success": False, "error": msg}), 400
 
-        # Preprocess image
         img_array = preprocess_image(file)
 
-        # Prediction
         prediction = model.predict(img_array)
 
-        predicted_class_index = np.argmax(prediction, axis=1)[0]
-
-        confidence = float(np.max(prediction))
-
-        # CLASS NAMES
         class_names = [
-            'Cataract',
-            'Diabetic Retinopathy',
-            'Glaucoma',
-            'Normal'
+            "Cataract",
+            "Diabetic Retinopathy",
+            "Glaucoma",
+            "Normal"
         ]
 
-        predicted_class = class_names[predicted_class_index]
+        predicted_index = np.argmax(prediction)
+        predicted_class = class_names[predicted_index]
+        confidence = float(np.max(prediction))
 
-        # ALL PROBABILITIES
-        class_probabilities = {}
+        probabilities = {
+            class_names[i]: float(prediction[0][i])
+            for i in range(len(class_names))
+        }
 
-        for i, class_name in enumerate(class_names):
-            class_probabilities[class_name] = float(prediction[0][i])
-
-        logger.info(
-            f"Prediction successful: {predicted_class} "
-            f"(confidence: {confidence:.2f})"
-        )
-
-        # SAVE HISTORY
-        history_item = {
+        # history
+        prediction_history.append({
             "filename": file.filename,
             "prediction": predicted_class,
             "confidence": confidence
-        }
+        })
 
-        prediction_history.append(history_item)
-
-        # RETURN RESPONSE
         return jsonify({
-            'success': True,
-            'prediction': predicted_class,
-            'confidence': confidence,
-            'probabilities': class_probabilities
+            "success": True,
+            "prediction": predicted_class,
+            "confidence": confidence,
+            "probabilities": probabilities
         })
 
     except Exception as e:
+        logger.error(str(e))
+        return jsonify({"success": False, "error": str(e)}), 500
 
-        logger.error(f"Prediction error: {str(e)}")
-
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-# HISTORY ROUTE
-@app.route('/history')
+@app.route("/history")
 def history():
     return jsonify(prediction_history)
 
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "healthy",
+        "model_loaded": model is not None
+    })
 
-# HEALTH CHECK
-@app.route('/health')
-def health_check():
-
-    try:
-
-        model_status = "loaded" if model is not None else "not loaded"
-
-        return jsonify({
-            'status': 'healthy',
-            'model_status': model_status
-        })
-
-    except Exception as e:
-
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e)
-        }), 500
-
-
-# FILE TOO LARGE
+# ---------------- ERROR HANDLERS ----------------
 @app.errorhandler(413)
 def too_large(e):
+    return jsonify({"error": "File too large (max 16MB)"}), 413
 
-    return jsonify({
-        'success': False,
-        'error': 'File too large. Maximum size is 16MB.'
-    }), 413
-
-
-# 404 ERROR
 @app.errorhandler(404)
 def not_found(e):
+    return render_template("index.html"), 404
 
-    return render_template('index.html'), 404
-
-
-# 500 ERROR
-@app.errorhandler(500)
-def internal_error(e):
-
-    return jsonify({
-        'success': False,
-        'error': 'Internal server error'
-    }), 500
-
-
-# CREATE APP
+# ---------------- START APP ----------------
 def create_app():
+    load_model_fn()
+    return app
 
-    try:
-
-        load_model()
-
-        logger.info("Application initialized successfully")
-
-        return app
-
-    except Exception as e:
-
-        logger.error(f"Failed to initialize application: {str(e)}")
-
-        raise e
-
-
-# MAIN
 if __name__ == "__main__":
+    app = create_app()
 
-    try:
+    port = int(os.environ.get("PORT", 10000))
 
-        app = create_app()
-
-        app.run(
-            debug=False,
-            host='0.0.0.0',
-            port=7860,
-            threaded=True
-        )
-
-    except Exception as e:
-
-        logger.error(f"Failed to start application: {str(e)}")
-
-        print(f"Error: {str(e)}")
-
-        print("Please ensure:")
-        print("1. Model file exists")
-        print("2. Templates folder exists")
-        print("3. Required packages are installed")
+    app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        threaded=True
+    )
